@@ -1,7 +1,95 @@
 ---
 - hosts: localhost
   tasks:
-  - name: "remove kubernetes python package"
+  - name: "Install kubernetes python package"
+    pip:
+      name: kubernetes
+      state: present
+
+  - name: "Remove jenkins ingress"
+    kubernetes.core.k8s:
+      api_version: networking.k8s.io/v1
+      kind: Ingress
+      name: jenkins-ingress
+      namespace: jenkins
+      state: absent
+
+  - name: "Remove jenkins service"
+    kubernetes.core.k8s:
+      api_version: v1
+      kind: Service
+      name: jenkins-service
+      namespace: jenkins
+      state: absent
+
+  - name: "Remove jenkins deployment"
+    kubernetes.core.k8s:
+      api_version: apps/v1
+      kind: Deployment
+      name: jenkins
+      namespace: jenkins
+      state: absent
+      wait: true
+      wait_condition:
+        type: Available
+        status: "False"
+      wait_timeout: 300
+
+  - name: "Remove jenkins persistent volume claim"
+    kubernetes.core.k8s:
+      api_version: v1
+      kind: PersistentVolumeClaim
+      name: jenkins-pv-claim
+      namespace: jenkins
+      state: absent
+      wait: true
+      wait_timeout: 300
+
+  - name: "Wait for PVC to be fully removed"
+    pause:
+      seconds: 10
+
+  - name: "Remove jenkins persistent volume"
+    kubernetes.core.k8s:
+      api_version: v1
+      kind: PersistentVolume
+      name: jenkins-pv
+      state: absent
+      wait: true
+      wait_timeout: 300
+
+  - name: "Remove jenkins cluster role binding"
+    kubernetes.core.k8s:
+      api_version: rbac.authorization.k8s.io/v1
+      kind: ClusterRoleBinding
+      name: jenkins
+      state: absent
+
+  - name: "Remove jenkins cluster role"
+    kubernetes.core.k8s:
+      api_version: rbac.authorization.k8s.io/v1
+      kind: ClusterRole
+      name: jenkins
+      state: absent
+
+  - name: "Remove jenkins service account"
+    kubernetes.core.k8s:
+      api_version: v1
+      kind: ServiceAccount
+      name: jenkins
+      namespace: jenkins
+      state: absent
+
+  - name: "Remove jenkins namespace"
+    kubernetes.core.k8s:
+      api_version: v1
+      kind: Namespace
+      name: jenkins
+      state: absent
+      wait: true
+      wait_timeout: 300
+
+  - name: "Remove kubernetes python package"
     pip:
       name: kubernetes
       state: absent

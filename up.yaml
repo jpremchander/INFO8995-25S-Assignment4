@@ -5,3 +5,206 @@
     pip:
       name: kubernetes
       state: present
+
+  - name: "Create jenkins namespace"
+    kubernetes.core.k8s:
+      name: jenkins
+      api_version: v1
+      kind: Namespace
+      state: present
+
+  - name: "Create jenkins service account"
+    kubernetes.core.k8s:
+      definition:
+        apiVersion: v1
+        kind: ServiceAccount
+        metadata:
+          name: jenkins
+          namespace: jenkins
+
+  - name: "Create jenkins cluster role"
+    kubernetes.core.k8s:
+      definition:
+        apiVersion: rbac.authorization.k8s.io/v1
+        kind: ClusterRole
+        metadata:
+          name: jenkins
+        rules:
+        - apiGroups: [""]
+          resources: ["*"]
+          verbs: ["*"]
+
+  - name: "Create jenkins cluster role binding"
+    kubernetes.core.k8s:
+      definition:
+        apiVersion: rbac.authorization.k8s.io/v1
+        kind: ClusterRoleBinding
+        metadata:
+          name: jenkins
+        roleRef:
+          apiGroup: rbac.authorization.k8s.io
+          kind: ClusterRole
+          name: jenkins
+        subjects:
+        - kind: ServiceAccount
+          name: jenkins
+          namespace: jenkins
+
+  - name: "Create jenkins persistent volume"
+    kubernetes.core.k8s:
+      definition:
+        apiVersion: v1
+        kind: PersistentVolume
+        metadata:
+          name: jenkins-pv
+        spec:
+          storageClassName: manual
+          capacity:
+            storage: 5Gi
+          accessModes:
+            - ReadWriteOnce
+          nfs:
+            server: 10.172.27.9
+            path: "/mnt/ops-pool/jenkins-data"
+          mountOptions:
+            - nfsvers=3
+            - proto=tcp
+            - soft
+            - nolock
+            - rw
+
+  - name: "Create jenkins persistent volume claim"
+    kubernetes.core.k8s:
+      definition:
+        apiVersion: v1
+        kind: PersistentVolumeClaim
+        metadata:
+          name: jenkins-pv-claim
+          namespace: jenkins
+        spec:
+          storageClassName: manual
+          accessModes:
+            - ReadWriteOnce
+          resources:
+            requests:
+              storage: 5Gi
+
+  - name: "Create jenkins deployment"
+    kubernetes.core.k8s:
+      definition:
+        apiVersion: apps/v1
+        kind: Deployment
+        metadata:
+          name: jenkins
+          namespace: jenkins
+        spec:
+          replicas: 1
+          selector:
+            matchLabels:
+              app: jenkins-server
+          template:
+            metadata:
+              labels:
+                app: jenkins-server
+            spec:
+              securityContext:
+                fsGroup: 1000
+                runAsUser: 1000
+              serviceAccountName: jenkins
+              containers:
+              - name: jenkins
+                image: jenkins/jenkins:lts
+                resources:
+                  limits:
+                    memory: "2Gi"
+                    cpu: "1000m"
+                  requests:
+                    memory: "500Mi"
+                    cpu: "500m"
+                ports:
+                - name: httpport
+                  containerPort: 8080
+                - name: jnlpport
+                  containerPort: 50000
+                livenessProbe:
+                  httpGet:
+                    path: "/login"
+                    port: 8080
+                  initialDelaySeconds: 90
+                  periodSeconds: 10
+                  timeoutSeconds: 5
+                  failureThreshold: 5
+                readinessProbe:
+                  httpGet:
+                    path: "/login"
+                    port: 8080
+                  initialDelaySeconds: 60
+                  periodSeconds: 10
+                  timeoutSeconds: 5
+                  failureThreshold: 3
+                volumeMounts:
+                - name: jenkins-data
+                  mountPath: /var/jenkins_home
+              volumes:
+              - name: jenkins-data
+                persistentVolumeClaim:
+                  claimName: jenkins-pv-claim
+
+  - name: "Create jenkins service"
+    kubernetes.core.k8s:
+      definition:
+        apiVersion: v1
+        kind: Service
+        metadata:
+          name: jenkins-service
+          namespace: jenkins
+          annotations:
+            prometheus.io/scrape: 'true'
+            prometheus.io/path:   /
+            prometheus.io/port:   '8080'
+        spec:
+          selector:
+            app: jenkins-server
+          type: ClusterIP
+          ports:
+          - name: httpport
+            port: 8080
+            targetPort: 8080
+          - name: jnlpport
+            port: 50000
+            targetPort: 50000
+
+  - name: "Create jenkins ingress"
+    kubernetes.core.k8s:
+      definition:
+        apiVersion: networking.k8s.io/v1
+        kind: Ingress
+        metadata:
+          name: jenkins-ingress
+          namespace: jenkins
+          annotations:
+            traefik.ingress.kubernetes.io/router.entrypoints: web
+            traefik.ingress.kubernetes.io/router.rule: Host(`jenkins.local`) || Host(`jenkins.10.172.27.36.nip.io`)
+        spec:
+          ingressClassName: traefik
+          rules:
+          - host: jenkins.local
+            http:
+              paths:
+              - path: /
+                pathType: Prefix
+                backend:
+                  service:
+                    name: jenkins-service
+                    port:
+                      number: 8080
+          - host: jenkins.10.172.27.36.nip.io
+            http:
+              paths:
+              - path: /
+                pathType: Prefix
+                backend:
+                  service:
+                    name: jenkins-service
+                    port:
+                      number: 8080

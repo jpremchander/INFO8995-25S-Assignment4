@@ -53,6 +53,7 @@ In assignment 3 you added gitea to your kubernetes cluster
         }
     }
 ```
+![alt text](image.png)
 
 Your job is to edit the up.yaml to add jenkins to your cluster and down.yaml to remove it. You will also need to expose jenkins with the ngrok or traefik and cloudflare ingress, as you did with the previous assignment.
 
