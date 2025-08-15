@@ -3,10 +3,10 @@
 **Course**: INFO8995 - Container Orchestration  
 **Assignment**: Assignment 4 - CI/CD on K8s  
 
-## 👥 Team Members
+## 👥 Group 7
 
-| Name | Student ID | Role |
-|------|------------|------|
+| Name | Student ID |
+|------|------------|
 | **Prem Chander J** | 9015480 | 
 | **Rishi Patel** | 8972657 | 
 
